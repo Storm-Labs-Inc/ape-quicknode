@@ -17,7 +17,10 @@ from requests import HTTPError
 from web3 import HTTPProvider, Web3
 from web3.exceptions import ContractLogicError as Web3ContractLogicError
 from web3.gas_strategies.rpc import rpc_gas_price_strategy
-from web3.middleware import geth_poa_middleware
+try:
+    from web3.middleware import ExtraDataToPOAMiddleware  # type: ignore
+except ImportError:
+    from web3.middleware import geth_poa_middleware as ExtraDataToPOAMiddleware  # type: ignore
 from web3.types import RPCEndpoint
 
 from .constants import QUICKNODE_NETWORKS
@@ -88,7 +91,7 @@ class QuickNode(Web3Provider, UpstreamProvider, BaseModel):
         self._web3 = Web3(HTTPProvider(self.uri))
         try:
             if self.network.ecosystem.name in ["optimism", "base", "polygon"]:
-                self._web3.middleware_onion.inject(geth_poa_middleware, layer=0)
+                self._web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
 
             self._web3.eth.set_gas_price_strategy(rpc_gas_price_strategy)
         except Exception as err:
