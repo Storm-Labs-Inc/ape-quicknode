@@ -1,6 +1,8 @@
 from ape import plugins
-from .provider import QuickNode
+
 from .constants import QUICKNODE_NETWORKS
+from .provider import QuickNode
+
 
 @plugins.register(plugins.ProviderPlugin)
 def providers():
