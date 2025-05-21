@@ -28,14 +28,17 @@ from .exceptions import MissingAuthTokenError, QuickNodeFeatureNotAvailable, Qui
 from .trace import QuickNodeTransactionTrace
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable  # TC003
+    from collections.abc import Iterable
 
-    from ape.types import BlockID  # TC002
-    from ape_ethereum.transactions import AccessList  # TC002
+    from ape.types import BlockID
+    from ape_ethereum.transactions import AccessList
 
 DEFAULT_ENVIRONMENT_VARIABLE_NAMES = ("QUICKNODE_SUBDOMAIN", "QUICKNODE_AUTH_TOKEN")
 
 NETWORKS_SUPPORTING_WEBSOCKETS = ("ethereum", "arbitrum", "base", "optimism", "polygon")
+
+# Flashbots will try to publish private transactions for 25 blocks.
+PRIVATE_TX_BLOCK_WAIT = 25
 
 
 class QuickNode(Web3Provider, UpstreamProvider, BaseModel):
@@ -153,14 +156,14 @@ class QuickNode(Web3Provider, UpstreamProvider, BaseModel):
         return VirtualMachineError(message=message, txn=txn)
 
     def create_access_list(
-        self, transaction: TransactionAPI, block_id: Optional[BlockID] = None
-    ) -> list[AccessList]:
+        self, transaction: TransactionAPI, block_id: Optional["BlockID"] = None
+    ) -> list["AccessList"]:
         if self.network.ecosystem.name == "polygon-zkevm":
             raise APINotImplementedError()
 
         return super().create_access_list(transaction, block_id=block_id)
 
-    def make_request(self, rpc: str, parameters: Optional[Iterable] = None) -> Any:
+    def make_request(self, rpc: str, parameters: Optional["Iterable"] = None) -> Any:
         parameters = parameters or []
         try:
             result = self.web3.provider.make_request(RPCEndpoint(rpc), parameters)
