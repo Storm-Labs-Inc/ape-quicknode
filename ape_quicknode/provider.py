@@ -87,7 +87,7 @@ class QuickNode(Web3Provider, UpstreamProvider, BaseModel):
         return self.uri
 
     @property
-    def ws_uri(self) -> str:
+    def ws_uri(self) -> Optional[str]:
         ecosystem_name = self.network.ecosystem.name
         if ecosystem_name not in NETWORKS_SUPPORTING_WEBSOCKETS:
             return None
