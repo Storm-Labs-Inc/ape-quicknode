@@ -68,7 +68,8 @@ def txn_hash():
 
 @pytest.fixture(
     params=[
-        "This feature is not available on your current plan. Please upgrade to access this functionality.",
+        "This feature is not available on your current plan. "
+        "Please upgrade to access this functionality.",
         "This feature is not supported on the current network.",
     ]
 )
