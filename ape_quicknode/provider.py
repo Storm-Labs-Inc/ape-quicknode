@@ -89,8 +89,13 @@ class QuickNode(Web3Provider, UpstreamProvider, BaseModel):
         return self.uri
 
     @property
-    def ws_uri(self) -> str:
-        return "ws" + self.uri[5:]
+    def ws_uri(self) -> Optional[str]:
+        ecosystem_name = self.network.ecosystem.name
+        if ecosystem_name not in NETWORKS_SUPPORTING_WEBSOCKETS:
+            return None
+
+        # NOTE: Overriding `Web3Provider.ws_uri` implementation
+        return "ws" + self.uri[4:]  # Remove `http` in default URI w/ `ws`
 
     @property
     def priority_fee(self) -> int:
