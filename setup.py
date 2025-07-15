@@ -10,17 +10,17 @@ extras_require = {
         "pytest-mock>=3.14.0",  # Mocking library
     ],
     "lint": [
-        "black>=24.10.0,<25",  # Auto-formatter and linter
-        "mypy>=1.13.0,<2",  # Static type analyzer
+        "black>=25.1.0,<26",  # Auto-formatter and linter
+        "mypy>=1.15.0,<2",  # Static type analyzer
         "types-setuptools",  # Needed for mypy type shed
         "types-requests",  # Needed for mypy type shed
-        "flake8>=7.1.1,<8",  # Style linter
+        "flake8>=7.1.2,<8",  # Style linter
         "flake8-breakpoint>=1.1.0,<2",  # Detect breakpoints left in code
         "flake8-print>=5.0.0,<6",  # Detect print statements left in code
         "flake8-pydantic",  # For detecting issues with Pydantic models
         "flake8-type-checking",  # Detect imports to move in/out of type-checking blocks
-        "isort>=5.13.2,<6",  # Import sorting linter
-        "mdformat>=0.7.19",  # Auto-formatter for markdown
+        "isort>=6.0.0,<7",  # Import sorting linter
+        "mdformat>=0.7.22",  # Auto-formatter for markdown
         "mdformat-gfm>=0.3.5",  # Needed for formatting GitHub-flavored markdown
         "mdformat-frontmatter>=0.4.1",  # Needed for frontmatters-style headers in issue templates
         "mdformat-pyproject>=0.0.2",  # Allows configuring in pyproject.toml
@@ -62,7 +62,14 @@ setup(
     author_email="admin@apeworx.io",
     url="https://github.com/ApeWorX/ape-quicknode",
     include_package_data=True,
-    install_requires=[],
+    install_requires=[
+        "eth-ape>=0.8.21,<0.9",
+        "eth-pydantic-types>=0.1.3,<0.2",
+        "ethpm-types>=0.6.19,<0.7",
+        "evm-trace>=0.2.3,<0.3",
+        "web3>=6.20.1,<8",
+        "requests>=2.32.3,<3",
+    ],
     python_requires=">=3.9,<4",
     extras_require=extras_require,
     py_modules=["ape_quicknode"],
