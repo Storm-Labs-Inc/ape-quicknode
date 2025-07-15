@@ -1,4 +1,3 @@
-
 # QuickNode Ape Plugin
 
 Use the [QuickNode](https://www.quicknode.com/) provider plugin to interact with blockchains via QuickNode's APIs.
