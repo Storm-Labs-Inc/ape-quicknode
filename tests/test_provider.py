@@ -3,7 +3,6 @@ from ape.api import TraceAPI
 from ape.exceptions import ContractLogicError, ProviderError, VirtualMachineError
 from ape.types import LogFilter
 from hexbytes import HexBytes
-from web3 import Web3
 from web3.exceptions import ContractLogicError as Web3ContractLogicError
 
 from ape_quicknode.exceptions import MissingAuthTokenError, QuickNodeProviderError
@@ -317,7 +316,8 @@ def test_send_private_transaction_success_no_preferences(
     mock_get_receipt = mocker.patch(
         "ape_quicknode.provider.QuickNode.get_receipt", return_value=mock_receipt_api
     )
-    # Mock chain_manager.history.append to prevent it from actually appending and triggering chain_id access
+    # Mock chain_manager.history.append to prevent it from actually appending and
+    # triggering chain_id access.
     mocker.patch.object(quicknode_provider.chain_manager.history, "append")
 
     tx_receipt = quicknode_provider.send_private_transaction(mock_transaction_api)
@@ -431,7 +431,8 @@ def test_send_private_transaction_contract_logic_error(
 ):
     revert_message = "Execution reverted by contract"
 
-    # Configure make_request to specifically raise Web3ContractLogicError for eth_sendPrivateTransaction
+    # Configure make_request to specifically raise Web3ContractLogicError for
+    # eth_sendPrivateTransaction
     def contract_logic_error_side_effect(rpc_method, params):
         if rpc_method == "eth_sendPrivateTransaction":
             raise Web3ContractLogicError(f"execution reverted: {revert_message}")

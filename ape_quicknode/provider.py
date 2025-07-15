@@ -199,7 +199,8 @@ class QuickNode(Web3Provider, UpstreamProvider, BaseModel):
 
     def send_private_transaction(self, txn: TransactionAPI, **kwargs) -> ReceiptAPI:
         """
-        See `QuickNode's marketplace page <https://marketplace.quicknode.com/add-on/flashbots-protect>`__
+        See `QuickNode's marketplace page
+        <https://marketplace.quicknode.com/add-on/flashbots-protect>`__
         for more information on using the Flashbots add-on.
         For more information on the API itself, see its
         `REST reference <https://www.quicknode.com/docs/ethereum/eth_sendPrivateTransaction>`__.
