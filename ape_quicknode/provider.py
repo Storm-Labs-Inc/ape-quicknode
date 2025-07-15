@@ -214,7 +214,7 @@ class QuickNode(Web3Provider, UpstreamProvider, BaseModel):
         """
         max_block_number = kwargs.pop("max_block_number", None)
 
-        params = {
+        params: dict[str, Any] = {
             "tx": HexBytes(txn.serialize_transaction()).hex(),
         }
         if max_block_number:
