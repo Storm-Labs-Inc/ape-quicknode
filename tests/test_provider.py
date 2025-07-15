@@ -1,6 +1,6 @@
 import pytest
 from ape.api import TraceAPI
-from ape.exceptions import ContractLogicError, ProviderError
+from ape.exceptions import ContractLogicError, ProviderError, VirtualMachineError
 from ape.types import LogFilter
 from hexbytes import HexBytes
 from web3.exceptions import ContractLogicError as Web3ContractLogicError
@@ -84,6 +84,135 @@ def receipt():
         "hash": TXN_HASH,
         "value": 0,
     }
+
+
+@pytest.fixture
+def mock_transaction_api(mocker):
+    mock = mocker.MagicMock()
+    mock.signature = "0x123abc"
+    mock.serialize_transaction.return_value = "123abc"
+    mock.max_fee = None
+    mock.max_priority_fee = None
+    mock.max_block_number = None
+    mock.required_confirmations = 1
+    return mock
+
+
+@pytest.fixture
+def mock_receipt_api(mocker):
+    mock = mocker.MagicMock()
+    mock.transaction_hash = TXN_HASH
+    return mock
+
+
+@pytest.fixture
+def mock_web3(mocker):
+    mock = mocker.MagicMock()  # Keep it simple, or use spec=True if strictness is needed later
+
+    # Explicitly create mock.eth and mock.provider as MagicMocks
+    mock.eth = mocker.MagicMock()
+    mock.provider = mocker.MagicMock()
+
+    def make_request_side_effect(rpc_method, params):
+        if rpc_method == "eth_sendPrivateTransaction":
+            return TXN_HASH
+        elif rpc_method == "eth_chainId":
+            return "0x1"  # Example chain ID
+        elif rpc_method == "eth_getTransactionReceipt":
+            return {
+                "blockHash": "0x" + "0" * 64,
+                "blockNumber": 1,
+                "contractAddress": None,
+                "cumulativeGasUsed": 100000,
+                "from": "0x" + "1" * 40,
+                "gasUsed": 50000,
+                "logs": [],
+                "logsBloom": "0x" + "0" * 512,
+                "status": 1,
+                "to": "0x" + "2" * 40,
+                "transactionHash": params[0] if params and params[0] else TXN_HASH,
+                "transactionIndex": 0,
+            }
+        elif rpc_method == "eth_getTransactionByHash":
+            return {
+                "blockHash": "0x" + "0" * 64,
+                "blockNumber": 1,
+                "from": "0x" + "1" * 40,
+                "gas": 21000,
+                "gasPrice": 10**10,
+                "hash": params[0] if params and params[0] else TXN_HASH,
+                "input": "0x",
+                "nonce": 0,
+                "to": "0x" + "2" * 40,
+                "transactionIndex": 0,
+                "value": 0,
+                "type": "0x0",
+                "v": 27,
+                "r": "0x" + "f" * 64,
+                "s": "0x" + "f" * 64,
+            }
+        elif rpc_method == "eth_blockNumber":  # Added for tests like test_get_transaction_trace
+            return 12345  # Example block number
+        elif rpc_method == "debug_traceTransaction":  # Added for test_get_transaction_trace
+            return {
+                "output": "0x",
+                "gasUsed": "0x5208",
+                "revertReason": None,
+            }
+        elif rpc_method == "eth_estimateGas":  # Added for estimate_gas tests
+            return 100000  # Example gas estimate
+        elif rpc_method == "eth_sendRawTransaction":  # Added for send_transaction tests
+            return TXN_HASH
+        elif rpc_method == "eth_getLogs":  # Added for test_get_contract_logs
+            return []
+        elif rpc_method == "eth_getBlockByNumber":  # Added for test_get_contract_logs
+            return {  # Return a mock block similar to the block fixture
+                "transactions": [],
+                "hash": HexBytes(
+                    "0xae1960ba0513948a507b652def457305d490d24bc0dd131d8d02be56564a3ee2"
+                ),
+                "number": 0,
+                "parentHash": HexBytes(
+                    "0x0000000000000000000000000000000000000000000000000000000000000000"
+                ),
+                "size": 517,
+                "timestamp": 1660338772,
+                "gasLimit": 30029122,
+                "gasUsed": 0,
+                "baseFeePerGas": 1000000000,
+                "difficulty": 131072,
+                "totalDifficulty": 131072,
+            }
+
+        raise NotImplementedError(
+            f"Mocked make_request not implemented for {rpc_method} with params {params}"
+        )
+
+    mock.provider.make_request.side_effect = make_request_side_effect
+    mock.eth.block_number = 12345  # Set block_number on the eth mock
+    mock.eth.chain_id = 1  # Set chain_id on the eth mock
+    mock.eth.estimate_gas.side_effect = lambda txn: mock.provider.make_request(
+        "eth_estimateGas", [txn]
+    )
+    mock.eth.send_raw_transaction.side_effect = lambda txn_bytes: mock.provider.make_request(
+        "eth_sendRawTransaction", [txn_bytes]
+    )
+    mock.eth.get_block.side_effect = (
+        lambda block_identifier, full_transactions=False: mock.provider.make_request(
+            "eth_getBlockByNumber" if block_identifier != "latest" else "eth_getBlockByNumber",
+            [block_identifier, full_transactions],
+        )
+    )
+    mock.eth.get_logs.side_effect = lambda log_filter: mock.provider.make_request(
+        "eth_getLogs", [log_filter]
+    )
+    mock.eth.wait_for_transaction_receipt.side_effect = (
+        lambda tx_hash, timeout=None, poll_latency=None: mock.provider.make_request(
+            "eth_getTransactionReceipt", [tx_hash]
+        )
+    )
+
+    return mock
 
 
 def test_when_no_auth_token_raises_error(missing_token, quicknode_provider):
@@ -177,3 +306,142 @@ def test_get_transaction_trace(networks, quicknode_provider, mock_web3, receipt)
     assert isinstance(trace, QuickNodeTransactionTrace)
     assert isinstance(trace, TraceAPI)
     assert trace.transaction_hash == tx_hash
+
+
+def test_send_private_transaction_success_no_preferences(
+    token, quicknode_provider, mock_web3, mock_transaction_api, mock_receipt_api, mocker
+):
+    # mock_web3.provider.make_request.return_value = TXN_HASH # Now handled by side_effect
+    quicknode_provider._web3 = mock_web3
+    mock_get_receipt = mocker.patch(
+        "ape_quicknode.provider.QuickNode.get_receipt", return_value=mock_receipt_api
+    )
+    # Mock chain_manager.history.append to prevent it from actually appending and
+    # triggering chain_id access.
+    mocker.patch.object(quicknode_provider.chain_manager.history, "append")
+
+    tx_receipt = quicknode_provider.send_private_transaction(mock_transaction_api)
+
+    assert tx_receipt.transaction_hash == TXN_HASH
+    # Ensure the correct call to eth_sendPrivateTransaction
+    private_tx_call = next(
+        c
+        for c in mock_web3.provider.make_request.call_args_list
+        if c[0][0] == "eth_sendPrivateTransaction"
+    )
+    assert private_tx_call[0][0] == "eth_sendPrivateTransaction"
+    assert private_tx_call[0][1] == [{"tx": "123abc"}]
+
+    expected_timeout = (
+        25 * quicknode_provider.network.block_time
+        + quicknode_provider.network.transaction_acceptance_timeout
+    )
+    mock_get_receipt.assert_called_once_with(
+        TXN_HASH, required_confirmations=1, timeout=expected_timeout
+    )
+    quicknode_provider.chain_manager.history.append.assert_called_once_with(mock_receipt_api)
+
+
+def test_send_private_transaction_success_with_preferences_fast_true(
+    token, quicknode_provider, mock_web3, mock_transaction_api, mock_receipt_api, mocker
+):
+    # mock_web3.provider.make_request.return_value = TXN_HASH # Now handled by side_effect
+    quicknode_provider._web3 = mock_web3
+    mock_get_receipt = mocker.patch(
+        "ape_quicknode.provider.QuickNode.get_receipt", return_value=mock_receipt_api
+    )
+    mocker.patch.object(quicknode_provider.chain_manager.history, "append")
+
+    preferences = {"fast": True}
+    tx_receipt = quicknode_provider.send_private_transaction(mock_transaction_api, **preferences)
+
+    assert tx_receipt.transaction_hash == TXN_HASH
+    private_tx_call = next(
+        c
+        for c in mock_web3.provider.make_request.call_args_list
+        if c[0][0] == "eth_sendPrivateTransaction"
+    )
+    assert private_tx_call[0][0] == "eth_sendPrivateTransaction"
+    assert private_tx_call[0][1] == [{"tx": "123abc", "preferences": preferences}]
+
+    expected_timeout = (
+        25 * quicknode_provider.network.block_time
+        + quicknode_provider.network.transaction_acceptance_timeout
+    )
+    mock_get_receipt.assert_called_once_with(
+        TXN_HASH, required_confirmations=1, timeout=expected_timeout
+    )
+    quicknode_provider.chain_manager.history.append.assert_called_once_with(mock_receipt_api)
+
+
+def test_send_private_transaction_with_max_block_number(
+    token, quicknode_provider, mock_web3, mock_transaction_api, mock_receipt_api, mocker
+):
+    # mock_web3.provider.make_request.return_value = TXN_HASH # Now handled by side_effect
+    quicknode_provider._web3 = mock_web3
+    mock_get_receipt = mocker.patch(
+        "ape_quicknode.provider.QuickNode.get_receipt", return_value=mock_receipt_api
+    )
+    mocker.patch.object(quicknode_provider.chain_manager.history, "append")
+
+    tx_receipt = quicknode_provider.send_private_transaction(
+        mock_transaction_api, max_block_number="0x3039"
+    )
+
+    assert tx_receipt.transaction_hash == TXN_HASH
+    private_tx_call = next(
+        c
+        for c in mock_web3.provider.make_request.call_args_list
+        if c[0][0] == "eth_sendPrivateTransaction"
+    )
+    assert private_tx_call[0][0] == "eth_sendPrivateTransaction"
+    assert private_tx_call[0][1] == [{"tx": "123abc", "maxBlockNumber": "0x3039"}]
+
+    expected_timeout = (
+        25 * quicknode_provider.network.block_time
+        + quicknode_provider.network.transaction_acceptance_timeout
+    )
+    mock_get_receipt.assert_called_once_with(
+        TXN_HASH, required_confirmations=1, timeout=expected_timeout
+    )
+    quicknode_provider.chain_manager.history.append.assert_called_once_with(mock_receipt_api)
+
+
+def test_send_private_transaction_value_error(
+    token, quicknode_provider, mock_web3, mock_transaction_api
+):
+    # Configure make_request to specifically raise ValueError for eth_sendPrivateTransaction
+    def value_error_side_effect(rpc_method, params):
+        if rpc_method == "eth_sendPrivateTransaction":
+            raise ValueError("Invalid params")
+        elif rpc_method == "eth_chainId":
+            return "0x1"
+        raise NotImplementedError(f"Mocked make_request not implemented for {rpc_method}")
+
+    mock_web3.provider.make_request.side_effect = value_error_side_effect
+    quicknode_provider._web3 = mock_web3
+
+    with pytest.raises(VirtualMachineError) as excinfo:
+        quicknode_provider.send_private_transaction(mock_transaction_api)
+    assert "Invalid params" in str(excinfo.value)
+
+
+def test_send_private_transaction_contract_logic_error(
+    token, quicknode_provider, mock_web3, mock_transaction_api
+):
+    revert_message = "Execution reverted by contract"
+
+    # Configure make_request to specifically raise Web3ContractLogicError for
+    # eth_sendPrivateTransaction
+    def contract_logic_error_side_effect(rpc_method, params):
+        if rpc_method == "eth_sendPrivateTransaction":
+            raise Web3ContractLogicError(f"execution reverted: {revert_message}")
+        elif rpc_method == "eth_chainId":
+            return "0x1"
+        raise NotImplementedError(f"Mocked make_request not implemented for {rpc_method}")
+
+    mock_web3.provider.make_request.side_effect = contract_logic_error_side_effect
+    quicknode_provider._web3 = mock_web3
+
+    with pytest.raises(ContractLogicError, match=revert_message):
+        quicknode_provider.send_private_transaction(mock_transaction_api)

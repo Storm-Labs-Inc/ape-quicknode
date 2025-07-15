@@ -8,7 +8,9 @@ from ape.exceptions import (
     ProviderError,
     VirtualMachineError,
 )
+from ape.logging import logger
 from ape_ethereum.provider import Web3Provider
+from eth_pydantic_types import HexBytes
 from eth_typing import HexStr
 from pydantic import BaseModel
 from requests import HTTPError
@@ -195,6 +197,63 @@ class QuickNode(Web3Provider, UpstreamProvider, BaseModel):
 
         return result
 
+    def send_private_transaction(self, txn: TransactionAPI, **kwargs) -> ReceiptAPI:
+        """
+        See `QuickNode's marketplace page
+        <https://marketplace.quicknode.com/add-on/flashbots-protect>`__
+        for more information on using the Flashbots add-on.
+        For more information on the API itself, see its
+        `REST reference <https://www.quicknode.com/docs/ethereum/eth_sendPrivateTransaction>`__.
+
+        Args:
+            txn: (:class:`~ape.api.transactionsTransactionAPI`): The transaction.
+            **kwargs: Kwargs here are used for private-transaction "preferences".
+
+        Returns:
+            :class:`~ape.api.transactions.ReceiptAPI`
+        """
+        max_block_number = kwargs.pop("max_block_number", None)
+
+        params: dict[str, Any] = {
+            "tx": HexBytes(txn.serialize_transaction()).hex(),
+        }
+        if max_block_number:
+            params["maxBlockNumber"] = max_block_number
+
+        if kwargs:
+            if "fast" not in kwargs:
+                # If sending preferences, `fast` must be present.
+                kwargs["fast"] = False
+            params["preferences"] = kwargs
+
+        try:
+            txn_hash = self.make_request("eth_sendPrivateTransaction", [params])
+        except (ValueError, Web3ContractLogicError) as err:
+            vm_err = self.get_virtual_machine_error(err, txn=txn)
+            raise vm_err from err
+
+        # Since Flashbots will attempt to publish for 25 blocks,
+        # we add 25 * block_time to the timeout.
+        timeout = (
+            PRIVATE_TX_BLOCK_WAIT * self.network.block_time
+            + self.network.transaction_acceptance_timeout
+        )
+
+        receipt = self.get_receipt(
+            txn_hash,
+            required_confirmations=(
+                txn.required_confirmations
+                if txn.required_confirmations is not None
+                else self.network.required_confirmations
+            ),
+            timeout=timeout,
+        )
+        logger.info(
+            f"Confirmed {receipt.txn_hash} (private) (total fees paid = {receipt.total_fees_paid})"
+        )
+        self.chain_manager.history.append(receipt)
+        return receipt
+
     def get_receipt(
         self,
         txn_hash: str,
@@ -214,5 +273,8 @@ class QuickNode(Web3Provider, UpstreamProvider, BaseModel):
                 }
             )
         return super().get_receipt(
-            txn_hash, required_confirmations=required_confirmations, timeout=timeout, **kwargs
+            txn_hash,
+            required_confirmations=required_confirmations,
+            timeout=timeout,
+            **kwargs,
         )
