@@ -445,3 +445,15 @@ def test_send_private_transaction_contract_logic_error(
 
     with pytest.raises(ContractLogicError, match=revert_message):
         quicknode_provider.send_private_transaction(mock_transaction_api)
+
+
+def test_make_request_empty_result(quicknode_provider, mock_web3):
+    """
+    Testing the case when the result is empty that it still returns it
+    (and not the raw JSON response).
+    """
+    quicknode_provider._web3 = mock_web3
+    mock_web3.provider.make_request.return_value = {"jsonrpc": "2.0", "id": 8, "result": []}
+    mock_web3.provider.make_request.side_effect = None
+    result = quicknode_provider.make_request("ape_madeUpRPC", [])
+    assert result == []
