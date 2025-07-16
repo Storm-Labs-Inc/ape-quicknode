@@ -192,10 +192,7 @@ class QuickNode(Web3Provider, UpstreamProvider, BaseModel):
             )
             raise cls(message) from err
 
-        if isinstance(result, dict) and (res := result.get("result")):
-            return res
-
-        return result
+        return result["result"] if isinstance(result, dict) and "result" in result else result
 
     def send_private_transaction(self, txn: TransactionAPI, **kwargs) -> ReceiptAPI:
         """
